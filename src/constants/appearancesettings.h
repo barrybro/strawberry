@@ -43,6 +43,7 @@ enum class BackgroundImagePosition {
 constexpr char kStyle[] = "style";
 constexpr char kSystemThemeIcons[] = "system_icons";
 constexpr char kDarkMode[] = "dark_mode";
+constexpr char kITunesLayout[] = "itunes_layout";
 constexpr char kUseCustomColorSet[] = "use-custom-color-set";
 
 // Per-QPalette-role custom colors (the "central roles" from https://doc.qt.io/qt-6/qpalette.html).
@@ -83,6 +84,7 @@ constexpr char kIconSizeLeftPanelButtons[] = "icon_size_left_panel_buttons";
 constexpr char kIconSizeConfigureButtons[] = "icon_size_configure_buttons";
 
 constexpr bool kDefaultDarkMode = false;
+constexpr bool kDefaultITunesLayout = false;
 constexpr bool kDefaultSystemIcons = false;
 constexpr bool kDefaultUseCustomColorSet = false;
 constexpr bool kDefaultTabBarSystemColor = false;

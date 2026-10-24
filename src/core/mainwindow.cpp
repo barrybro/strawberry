@@ -227,6 +227,8 @@
 
 #include "smartplaylists/smartplaylistsviewcontainer.h"
 
+#include "itunes/itunestheme.h"
+
 #include "organize/organizeerrordialog.h"
 
 #ifdef Q_OS_WIN32
@@ -445,7 +447,8 @@ MainWindow::MainWindow(Application *app,
       exit_count_(0),
       exit_started_(false),
       playlists_loaded_(false),
-      delete_files_(false) {
+      delete_files_(false),
+      itunes_theme_(nullptr) {
 
   qLog(Debug) << "Starting";
 
@@ -1065,6 +1068,9 @@ MainWindow::MainWindow(Application *app,
   appearance_->LoadCustomPaletteColors();
   StyleSheetLoader *css_loader = new StyleSheetLoader(this);
   css_loader->SetStyleSheet(this, u":/style/strawberry.css"_s);
+  if (ITunesTheme::IsEnabled()) {
+    itunes_theme_ = new ITunesTheme(this, ui_, app_->player(), app_->playlist_manager(), css_loader);
+  }
 
   // Load playlists
   app_->playlist_manager()->Init(ui_->playlist_sequence, ui_->playlist);
@@ -1121,6 +1127,8 @@ MainWindow::MainWindow(Application *app,
 
   // Users often collapse one side of the splitter by mistake and don't know how to restore it. This must be set after the state is restored above.
   ui_->splitter->setChildrenCollapsible(false);
+
+  if (itunes_theme_) itunes_theme_->Apply();
 
   ReloadSettings();
 
@@ -1492,6 +1500,7 @@ void MainWindow::SaveSettings() {
   app_->player()->SaveVolume();
   app_->player()->SavePlaybackStatus();
   ui_->tabs->SaveSettings(QLatin1String(MainWindowSettings::kSettingsGroup));
+  if (itunes_theme_) itunes_theme_->SaveSettings();
   ui_->playlist->view()->SaveSettings();
   app_->scrobbler()->WriteCache();
 

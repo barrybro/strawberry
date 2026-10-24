@@ -1,0 +1,114 @@
+/* 2004 era jukebox layout, loaded after strawberry.css when the iTunes-style layout is enabled. */
+/* Colors are fixed rather than taken from the palette, the look is a light one regardless of the system theme. */
+
+#itunes_top_bar QLabel, #status_bar_internal QLabel {
+  color: #1a1a1a;
+}
+
+QLabel#itunes_caption {
+  font-size: 9px;
+}
+
+QSlider#itunes_volume {
+  min-width: 70px;
+}
+
+QSlider#itunes_volume::groove:horizontal {
+  height: 3px;
+  border: 1px solid #555555;
+  border-radius: 2px;
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #7a7a7a, stop:1 #cfcfcf);
+}
+
+QSlider#itunes_volume::handle:horizontal {
+  width: 11px;
+  height: 11px;
+  margin: -5px 0px;
+  border: 1px solid #555555;
+  border-radius: 6px;
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:0.5 #dcdcdc, stop:1 #b4b4b4);
+}
+
+QSlider#itunes_volume::handle:horizontal:disabled {
+  background: #d0d0d0;
+  border-color: #999999;
+}
+
+#itunes_top_bar SearchField QLineEdit {
+  border: 1px solid #6a6a6a;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #000000;
+  min-height: 18px;
+}
+
+/* Source list */
+
+QTreeWidget#itunes_source_list {
+  background-color: #ffffff;
+  color: #000000;
+  border: 1px solid #6b6b6b;
+  outline: 0px;
+  font-size: 11px;
+}
+
+QTreeWidget#itunes_source_list::item {
+  height: 20px;
+  border: 0px;
+}
+
+QTreeWidget#itunes_source_list::item:selected:active {
+  background-color: #3875d7;
+  color: #ffffff;
+}
+
+QTreeWidget#itunes_source_list::item:selected:!active {
+  background-color: #c4c4c4;
+  color: #000000;
+}
+
+/* Song list, white and pale blue stripes */
+
+PlaylistView#playlist {
+  background-color: #ffffff;
+  alternate-background-color: #edf3fe;
+  color: #000000;
+  border: 1px solid #6b6b6b;
+  selection-background-color: #3d80df;
+  selection-color: #ffffff;
+}
+
+/* The background shorthand also resets the background image, which hides the default strawberry. */
+PlaylistView#playlist[default_background_enabled="true"], PlaylistView#playlist[strawbs_background_enabled="true"] {
+  background: #ffffff;
+}
+
+CollectionView, FileViewList, PlaylistListView, SmartPlaylistsView {
+  background-color: #ffffff;
+  alternate-background-color: #edf3fe;
+  color: #000000;
+  selection-background-color: #3d80df;
+  selection-color: #ffffff;
+}
+
+/* Aqua column headers */
+
+PlaylistView QHeaderView::section, QTreeWidget#itunes_source_list QHeaderView::section {
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:0.5 #ececec, stop:0.51 #dcdcdc, stop:1 #f2f2f2);
+  color: #000000;
+  border: 0px;
+  border-right: 1px solid #b4b4b4;
+  border-bottom: 1px solid #8c8c8c;
+  padding: 1px 4px;
+  font-size: 11px;
+}
+
+/* Thin splitters, the metal shows through */
+
+QSplitter#splitter::handle, QSplitter#itunes_source_splitter::handle {
+  background: transparent;
+}
+
+QSplitter#splitter::handle:horizontal, QSplitter#itunes_source_splitter::handle:horizontal {
+  width: 5px;
+}

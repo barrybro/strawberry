@@ -297,6 +297,20 @@ void FancyTabWidget::CurrentTabChangedSlot(const int idx) {
 
 }
 
+void FancyTabWidget::tabInserted(const int idx) {
+
+  QTabWidget::tabInserted(idx);
+  Q_EMIT TabsChanged();
+
+}
+
+void FancyTabWidget::tabRemoved(const int idx) {
+
+  QTabWidget::tabRemoved(idx);
+  Q_EMIT TabsChanged();
+
+}
+
 int FancyTabWidget::IndexOfTab(QWidget *widget) {
 
   if (!tabs_.contains(widget)) return -1;

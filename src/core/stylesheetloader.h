@@ -28,6 +28,7 @@
 #include <QHash>
 #include <QPalette>
 #include <QString>
+#include <QStringList>
 
 #include "includes/shared_ptr.h"
 
@@ -44,6 +45,7 @@ class StyleSheetLoader : public QObject {
   // If the stylesheet contains strings like %palette-[role], these get replaced with actual palette colours.
   // The stylesheet is reloaded when the widget's palette changes.
   void SetStyleSheet(QWidget *widget, const QString &filename);
+  void SetStyleSheet(QWidget *widget, const QStringList &filenames);
 
  protected:
   bool eventFilter(QObject *obj, QEvent *event) override;
@@ -51,7 +53,7 @@ class StyleSheetLoader : public QObject {
  private:
   struct StyleSheetData {
     StyleSheetData() {}
-    QString filename_;
+    QStringList filenames_;
     QString stylesheet_template_;
   };
 

@@ -92,6 +92,7 @@ class TagFetcher;
 class TrackSelectionDialog;
 class TranscodeDialog;
 class Ui_MainWindow;
+class ITunesTheme;
 class StreamingLibraryView;
 class StreamingFavoritesView;
 class SmartPlaylistsViewContainer;
@@ -450,6 +451,7 @@ class MainWindow : public QMainWindow, public PlatformInterface {
   bool exit_started_;
   bool playlists_loaded_;
   bool delete_files_;
+  ITunesTheme *itunes_theme_;
   std::optional<CommandlineOptions> options_;
 
   class MetadataQueueEntry {

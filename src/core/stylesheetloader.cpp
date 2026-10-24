@@ -66,23 +66,31 @@ StyleSheetLoader::StyleSheetLoader(QObject *parent) : QObject(parent) {}
 
 void StyleSheetLoader::SetStyleSheet(QWidget *widget, const QString &filename) {
 
-  // Load the file
-  QFile file(filename);
-  if (!file.open(QIODevice::ReadOnly)) {
-    qLog(Error) << "Could not open stylesheet file" << filename << "for reading:" << file.errorString();
-    return;
-  }
-  QTextStream stream(&file);
+  SetStyleSheet(widget, QStringList() << filename);
+
+}
+
+void StyleSheetLoader::SetStyleSheet(QWidget *widget, const QStringList &filenames) {
+
+  // Load the files, later files override earlier ones
   QString stylesheet;
-  Q_FOREVER {
-    QString line = stream.readLine();
-    stylesheet.append(line);
-    if (stream.atEnd()) break;
+  for (const QString &filename : filenames) {
+    QFile file(filename);
+    if (!file.open(QIODevice::ReadOnly)) {
+      qLog(Error) << "Could not open stylesheet file" << filename << "for reading:" << file.errorString();
+      return;
+    }
+    QTextStream stream(&file);
+    Q_FOREVER {
+      QString line = stream.readLine();
+      stylesheet.append(line);
+      if (stream.atEnd()) break;
+    }
+    file.close();
   }
-  file.close();
 
   SharedPtr<StyleSheetData> styledata = make_shared<StyleSheetData>();
-  styledata->filename_ = filename;
+  styledata->filenames_ = filenames;
   styledata->stylesheet_template_ = stylesheet;
   styledata_.insert(widget, styledata);
 

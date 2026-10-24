@@ -68,6 +68,16 @@
         </item>
        </layout>
       </item>
+      <item>
+       <widget class="QCheckBox" name="checkbox_itunes_layout">
+        <property name="toolTip">
+         <string>You need to restart Strawberry for this setting to take affect</string>
+        </property>
+        <property name="text">
+         <string>iTunes-style layout (circa 2004)</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>

@@ -154,6 +154,8 @@ void AppearanceSettingsPage::Load() {
   original_dark_mode_ = s.value(kDarkMode, kDefaultDarkMode).toBool();
   ui_->checkbox_dark_mode->setChecked(original_dark_mode_);
 
+  ui_->checkbox_itunes_layout->setChecked(s.value(kITunesLayout, kDefaultITunesLayout).toBool());
+
   // Colors
   const QPalette palette = QApplication::palette();
 
@@ -287,6 +289,7 @@ void AppearanceSettingsPage::Save() {
 #endif
 
   s.setValue(kDarkMode, Utilities::StyleHasDarkModeSupport(selected_style) ? ui_->checkbox_dark_mode->isChecked() : false);
+  s.setValue(kITunesLayout, ui_->checkbox_itunes_layout->isChecked());
 
   // Colors
   const bool use_custom_color_set = Utilities::StyleHasCustomPaletteColorsSupport(selected_style) && ui_->use_custom_color_set->isChecked();

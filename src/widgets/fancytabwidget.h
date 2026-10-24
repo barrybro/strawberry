@@ -89,6 +89,8 @@ class FancyTabWidget : public QTabWidget {
  protected:
   void paintEvent(QPaintEvent *e) override;
   void contextMenuEvent(QContextMenuEvent *e) override;
+  void tabInserted(const int idx) override;
+  void tabRemoved(const int idx) override;
 
  private:
   void addMenuItem(QActionGroup *group, const QString &text, Mode mode);
@@ -96,6 +98,7 @@ class FancyTabWidget : public QTabWidget {
  Q_SIGNALS:
   void ModeChanged(const FancyTabWidget::Mode mode);
   void CurrentTabChanged(const int idx);
+  void TabsChanged();
 
  private:
   QPixmap background_pixmap_;

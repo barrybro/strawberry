@@ -842,6 +842,11 @@ set(SOURCES
   src/widgets/ratingpainter.cpp
   src/widgets/resizabletextedit.cpp
 
+  src/itunes/itunestheme.cpp
+  src/itunes/itunesbutton.cpp
+  src/itunes/ituneslcd.cpp
+  src/itunes/itunessourcelist.cpp
+
   src/songeditor/songeditor.cpp
   src/songeditor/tageditor.cpp
   src/songeditor/lyricstab.cpp
@@ -1150,6 +1155,11 @@ set(HEADERS
   src/widgets/ratingwidget.h
   src/widgets/forcescrollperpixel.h
   src/widgets/resizabletextedit.h
+
+  src/itunes/itunestheme.h
+  src/itunes/itunesbutton.h
+  src/itunes/ituneslcd.h
+  src/itunes/itunessourcelist.h
 
   src/songeditor/songeditor.h
   src/songeditor/tageditor.h
