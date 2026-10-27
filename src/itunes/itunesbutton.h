@@ -29,6 +29,7 @@ class QAction;
 
 // A brushed-metal era "aqua" button, painted entirely in code.
 // Round buttons are used for the transport controls, rounded rectangles for the small buttons in the bottom bar.
+// Checkable buttons light up blue while they are on.
 class ITunesButton : public QAbstractButton {
   Q_OBJECT
 
@@ -39,7 +40,15 @@ class ITunesButton : public QAbstractButton {
     Pause,
     Next,
     Browse,
-    Plus
+    Plus,
+    Shuffle,
+    Repeat,
+    RepeatOne,
+    Artwork,
+    Speaker,
+    Columns,
+    Lyrics,
+    Equalizer
   };
 
   enum class Shape {

@@ -112,3 +112,36 @@ QSplitter#splitter::handle, QSplitter#itunes_source_splitter::handle {
 QSplitter#splitter::handle:horizontal, QSplitter#itunes_source_splitter::handle:horizontal {
   width: 5px;
 }
+
+/* Section headers in the source list are disabled items, keep them readable */
+
+QTreeWidget#itunes_source_list::item:disabled {
+  color: #808080;
+}
+
+/* Bottom bar: what exactly is playing */
+
+QLabel#itunes_format {
+  color: #3a3a3a;
+  font-size: 11px;
+}
+
+QLabel#itunes_hires {
+  color: #1f8f3a;
+  font-size: 10px;
+  font-weight: bold;
+  border: 1px solid #1f8f3a;
+  border-radius: 3px;
+  padding: 0px 3px;
+}
+
+/* Lyrics and song information on the right */
+
+QWidget#itunes_context_pane {
+  background-color: #ffffff;
+  border: 1px solid #6b6b6b;
+}
+
+QSplitter#splitter::handle:horizontal {
+  width: 5px;
+}

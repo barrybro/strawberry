@@ -59,6 +59,7 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QShortcut>
+#include <QSignalBlocker>
 #include <QMessageBox>
 #include <QErrorMessage>
 #include <QColor>
@@ -1070,6 +1071,7 @@ MainWindow::MainWindow(Application *app,
   css_loader->SetStyleSheet(this, u":/style/strawberry.css"_s);
   if (ITunesTheme::IsEnabled()) {
     itunes_theme_ = new ITunesTheme(this, ui_, app_->player(), app_->playlist_manager(), css_loader);
+    QObject::connect(itunes_theme_, &ITunesTheme::OpenOutputSettings, this, [this]() { OpenSettingsDialogAtPage(SettingsDialog::Page::Backend); });
   }
 
   // Load playlists
@@ -1182,9 +1184,19 @@ MainWindow::MainWindow(Application *app,
   }
 #endif
 
+  // The source list in the sidebar is the only way to move around in the iTunes-style layout, so it can't be hidden there.
+  // The action still follows the setting, so it's saved unchanged for the stock layout.
   bool show_sidebar = settings.value(MainWindowSettings::kShowSidebar, MainWindowSettings::kDefaultShowSidebar).toBool();
-  ui_->sidebar_layout->setVisible(show_sidebar);
-  ui_->action_toggle_show_sidebar->setChecked(show_sidebar);
+  if (itunes_theme_) {
+    const QSignalBlocker blocker(ui_->action_toggle_show_sidebar);
+    ui_->action_toggle_show_sidebar->setChecked(show_sidebar);
+    ui_->action_toggle_show_sidebar->setVisible(false);
+    ui_->sidebar_layout->show();
+  }
+  else {
+    ui_->sidebar_layout->setVisible(show_sidebar);
+    ui_->action_toggle_show_sidebar->setChecked(show_sidebar);
+  }
 
   QShortcut *close_window_shortcut = new QShortcut(this);
   close_window_shortcut->setKey(Qt::CTRL | Qt::SHIFT | Qt::Key_W);
@@ -1760,7 +1772,8 @@ void MainWindow::TrackSkipped(PlaylistItemPtr item) {
 
 void MainWindow::TabSwitched() {
 
-  if (playing_widget_ && ui_->action_toggle_show_sidebar->isChecked() && (ui_->tabs->currentIndex() != ui_->tabs->IndexOfTab(context_view_) || !context_view_->album_enabled())) {
+  const bool show_playing_widget = itunes_theme_ ? itunes_theme_->artwork_visible() : ui_->action_toggle_show_sidebar->isChecked();
+  if (playing_widget_ && show_playing_widget && (ui_->tabs->currentIndex() != ui_->tabs->IndexOfTab(context_view_) || !context_view_->album_enabled())) {
     ui_->widget_playing->SetEnabled();
   }
   else {
@@ -1800,7 +1813,10 @@ void MainWindow::SaveGeometry() {
   s.setValue(MainWindowSettings::kMinimized, isMinimized());
   s.setValue(MainWindowSettings::kHidden, isHidden());
   s.setValue(MainWindowSettings::kGeometry, saveGeometry());
-  s.setValue(MainWindowSettings::kSplitterState, ui_->splitter->saveState());
+  // The iTunes-style layout keeps its own sidebar width, the splitter state is kept for the stock layout.
+  if (!itunes_theme_) {
+    s.setValue(MainWindowSettings::kSplitterState, ui_->splitter->saveState());
+  }
   s.endGroup();
 
 }
@@ -3093,6 +3109,9 @@ void MainWindow::TaskCountChanged(const int count) {
 }
 
 void MainWindow::PlayingWidgetPositionChanged(const bool above_status_bar) {
+
+  // The iTunes-style layout has the status bar along the bottom of the window.
+  if (itunes_theme_) return;
 
   if (above_status_bar) ui_->status_bar->setParent(ui_->centralWidget);
   else ui_->status_bar->setParent(ui_->player_controls_container);

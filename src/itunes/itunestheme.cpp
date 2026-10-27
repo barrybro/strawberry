@@ -26,6 +26,9 @@
 #include <QLabel>
 #include <QSlider>
 #include <QSplitter>
+#include <QAction>
+#include <QMenu>
+#include <QStringList>
 #include <QTabBar>
 #include <QBoxLayout>
 #include <QLayoutItem>
@@ -43,7 +46,11 @@
 #include "core/settings.h"
 #include "core/player.h"
 #include "core/stylesheetloader.h"
+#include "core/song.h"
 #include "playlist/playlistmanager.h"
+#include "playlist/playlistsequence.h"
+#include "widgets/fancytabdata.h"
+#include "widgets/playingwidget.h"
 #include "widgets/searchfield.h"
 #include "itunesbutton.h"
 #include "ituneslcd.h"
@@ -54,11 +61,15 @@ using namespace Qt::Literals::StringLiterals;
 
 namespace {
 constexpr char kSettingsGroup[] = "ITunesLayout";
-constexpr char kSourceSplitterState[] = "source_splitter_state";
-constexpr char kBrowse[] = "browse";
-constexpr char kBrowseWidth[] = "browse_width";
-constexpr int kDefaultSourceListWidth = 170;
-constexpr int kDefaultBrowseWidth = 300;
+constexpr char kSidebarWidth[] = "sidebar_width";
+constexpr char kSource[] = "source";
+constexpr char kHiddenSources[] = "hidden_sources";
+constexpr char kContextVisible[] = "context_visible";
+constexpr char kContextWidth[] = "context_width";
+constexpr char kArtworkVisible[] = "artwork_visible";
+constexpr int kDefaultSidebarWidth = 190;
+constexpr int kDefaultContextWidth = 300;
+constexpr int kBottomButtonHeight = 22;
 
 // Adds a widget to a layout, keeping it hidden if it was explicitly hidden before.
 void MoveWidget(QWidget *widget, QBoxLayout *layout, const int stretch = 0) {
@@ -95,15 +106,23 @@ ITunesTheme::ITunesTheme(QMainWindow *mainwindow, Ui_MainWindow *ui, SharedPtr<P
       css_loader_(css_loader),
       central_widget_(nullptr),
       volume_(nullptr),
+      search_column_(nullptr),
       tabs_(nullptr),
       splitter_(nullptr),
-      source_splitter_(nullptr),
+      source_list_(nullptr),
+      context_pane_(nullptr),
       volume_slider_(nullptr),
       play_button_(nullptr),
       browse_button_(nullptr),
+      shuffle_button_(nullptr),
+      repeat_button_(nullptr),
+      artwork_button_(nullptr),
+      context_button_(nullptr),
       lcd_(nullptr),
+      format_label_(nullptr),
+      hires_label_(nullptr),
       original_tab_mode_(FancyTabWidget::Mode::LargeSidebar),
-      browse_width_(kDefaultBrowseWidth) {}
+      artwork_visible_(true) {}
 
 bool ITunesTheme::IsEnabled() {
 
@@ -131,8 +150,10 @@ void ITunesTheme::Apply() {
   css_loader_->SetStyleSheet(mainwindow_, QStringList() << u":/style/strawberry.css"_s << u":/style/itunes.css"_s);
 
   ui_->layout_centralWidget->insertWidget(0, CreateTopBar());
-  RearrangeStatusBar();
   RearrangeSidebar();
+  CreateContextPane();
+  RearrangeStatusBar();
+  RestoreSettings();
 
 }
 
@@ -215,24 +236,30 @@ QWidget *ITunesTheme::CreateTopBar() {
   SearchField *search_field = ui_->playlist->findChild<SearchField*>(u"search_field"_s);
   if (search_field) {
     search_field->setFixedWidth(170);
-    layout->addWidget(LabeledColumn(search_field, tr("Search"), bar));
+    search_column_ = LabeledColumn(search_field, tr("Search"), bar);
+    QSizePolicy size_policy = search_column_->sizePolicy();
+    size_policy.setRetainSizeWhenHidden(true);
+    search_column_->setSizePolicy(size_policy);
+    layout->addWidget(search_column_);
   }
 
-  // Browse shows and hides the collection browser next to the source list.
-  browse_button_ = new ITunesButton(ITunesButton::Glyph::Browse, ITunesButton::Shape::Round, 30, bar);
-  browse_button_->setCheckable(true);
-  browse_button_->setToolTip(tr("Browse"));
-  QObject::connect(browse_button_, &ITunesButton::clicked, this, &ITunesTheme::SetBrowseVisible);
-  layout->addWidget(LabeledColumn(browse_button_, tr("Browse"), bar));
-
   return bar;
+
+}
+
+ITunesButton *ITunesTheme::AddBottomButton(const ITunesButton::Glyph glyph, const QString &tooltip, QBoxLayout *layout) {
+
+  ITunesButton *button = new ITunesButton(glyph, ITunesButton::Shape::RoundedRect, kBottomButtonHeight, ui_->status_bar_internal);
+  button->setToolTip(tooltip);
+  layout->addWidget(button);
+  return button;
 
 }
 
 void ITunesTheme::RearrangeStatusBar() {
 
   // The transport controls have moved to the top, so the stock player control row is not needed.
-  ui_->player_controls->hide();
+  ui_->player_controls_container->hide();
   ui_->line_6->hide();
   ui_->status_bar_line->hide();
   ui_->line_5->hide();
@@ -240,31 +267,233 @@ void ITunesTheme::RearrangeStatusBar() {
   ui_->line_love->hide();
   // Progress is shown in the status display.
   ui_->track_slider->hide();
+  // Shuffle and repeat get their own buttons, the stock widget keeps the modes.
+  ui_->playlist_sequence->hide();
+
+  // The bottom bar runs along the whole window, below the source list too.
+  ui_->status_bar->setParent(central_widget_);
+  ui_->layout_centralWidget->addWidget(ui_->status_bar);
+  ui_->status_bar->show();
 
   QHBoxLayout *layout = ui_->layout_status_bar_internal;
   while (QLayoutItem *item = layout->takeAt(0)) {
     delete item;
   }
-  layout->setContentsMargins(6, 4, 6, 4);
+  layout->setContentsMargins(6, 5, 6, 5);
   layout->setSpacing(6);
 
-  ITunesButton *add_button = new ITunesButton(ITunesButton::Glyph::Plus, ITunesButton::Shape::RoundedRect, 20, ui_->status_bar_internal);
+  // Left: playlist, playback order and artwork
+  ITunesButton *add_button = AddBottomButton(ITunesButton::Glyph::Plus, QString(), layout);
   add_button->SetAction(ui_->action_new_playlist);
-  layout->addWidget(add_button);
-  MoveWidget(ui_->playlist_sequence, layout);
+  add_button->setToolTip(tr("Create a playlist"));
+
+  PlaylistSequence *sequence = ui_->playlist_sequence;
+  shuffle_button_ = AddBottomButton(ITunesButton::Glyph::Shuffle, QString(), layout);
+  shuffle_button_->setCheckable(true);
+  shuffle_button_->setContextMenuPolicy(Qt::CustomContextMenu);
+  QObject::connect(shuffle_button_, &ITunesButton::clicked, this, &ITunesTheme::ShuffleClicked);
+  QObject::connect(shuffle_button_, &ITunesButton::customContextMenuRequested, this, [this, sequence](const QPoint &pos) { sequence->shuffle_menu()->exec(shuffle_button_->mapToGlobal(pos)); });
+  QObject::connect(sequence, &PlaylistSequence::ShuffleModeChanged, this, &ITunesTheme::ShuffleModeChanged);
+  ShuffleModeChanged(sequence->shuffle_mode());
+
+  repeat_button_ = AddBottomButton(ITunesButton::Glyph::Repeat, QString(), layout);
+  repeat_button_->setCheckable(true);
+  repeat_button_->setContextMenuPolicy(Qt::CustomContextMenu);
+  QObject::connect(repeat_button_, &ITunesButton::clicked, this, &ITunesTheme::RepeatClicked);
+  QObject::connect(repeat_button_, &ITunesButton::customContextMenuRequested, this, [this, sequence](const QPoint &pos) { sequence->repeat_menu()->exec(repeat_button_->mapToGlobal(pos)); });
+  QObject::connect(sequence, &PlaylistSequence::RepeatModeChanged, this, &ITunesTheme::RepeatModeChanged);
+  RepeatModeChanged(sequence->repeat_mode());
+
+  artwork_button_ = AddBottomButton(ITunesButton::Glyph::Artwork, tr("Show or hide the artwork of the song playing"), layout);
+  artwork_button_->setCheckable(true);
+  QObject::connect(artwork_button_, &ITunesButton::clicked, this, &ITunesTheme::SetArtworkVisible);
+
+  // Middle: what's in the song list, or progress while loading
   layout->addStretch(1);
   MoveWidget(ui_->status_bar_stack, layout);
+  ui_->playlist_summary->setAlignment(Qt::AlignCenter);
   layout->addStretch(1);
+
+  // Right: what is playing exactly, and the views that sit around the song list
+  format_label_ = new QLabel(ui_->status_bar_internal);
+  format_label_->setObjectName(u"itunes_format"_s);
+  format_label_->setToolTip(tr("Format of the song playing"));
+  layout->addWidget(format_label_);
+  hires_label_ = new QLabel(tr("Hi-Res"), ui_->status_bar_internal);
+  hires_label_->setObjectName(u"itunes_hires"_s);
+  hires_label_->setToolTip(tr("Lossless, with more than 16 bits or 48 kHz"));
+  hires_label_->hide();
+  layout->addWidget(hires_label_);
+  layout->addSpacing(6);
+  QObject::connect(&*playlist_manager_, &PlaylistManager::CurrentSongChanged, this, &ITunesTheme::SongChanged);
+  QObject::connect(&*player_, &Player::Stopped, this, [this]() { SongChanged(Song()); });
+
   MoveWidget(ui_->button_scrobble, layout);
   MoveWidget(ui_->widget_love, layout);
 
-  ui_->playlist_summary->setAlignment(Qt::AlignCenter);
+  ITunesButton *output_button = AddBottomButton(ITunesButton::Glyph::Speaker, tr("Audio output"), layout);
+  QObject::connect(output_button, &ITunesButton::clicked, this, &ITunesTheme::OpenOutputSettings);
+
+  browse_button_ = AddBottomButton(ITunesButton::Glyph::Columns, tr("Browse the library"), layout);
+  browse_button_->setCheckable(true);
+  QObject::connect(browse_button_, &ITunesButton::clicked, this, &ITunesTheme::BrowseClicked);
+
+  if (context_pane_) {
+    context_button_ = AddBottomButton(ITunesButton::Glyph::Lyrics, tr("Show or hide lyrics and song information"), layout);
+    context_button_->setCheckable(true);
+    QObject::connect(context_button_, &ITunesButton::clicked, this, &ITunesTheme::SetContextVisible);
+  }
+
+  ITunesButton *equalizer_button = AddBottomButton(ITunesButton::Glyph::Equalizer, QString(), layout);
+  equalizer_button->SetAction(ui_->action_equalizer);
+
+}
+
+void ITunesTheme::CreateContextPane() {
+
+  // The context view, with lyrics and song information, sits on the right of the song list instead of being a view of its own.
+  QWidget *context_view = nullptr;
+  for (int i = 0; i < tabs_->count(); ++i) {
+    FancyTabData *tab_data = tabs_->tabBar()->tabData(i).value<FancyTabData*>();
+    if (tab_data && tab_data->name() == "context"_L1) {
+      context_view = tab_data->widget_view();
+      break;
+    }
+  }
+  if (!context_view) return;
+
+  context_pane_ = new QWidget(splitter_);
+  context_pane_->setObjectName(u"itunes_context_pane"_s);
+  QVBoxLayout *layout = new QVBoxLayout(context_pane_);
+  layout->setContentsMargins(0, 0, 0, 0);
+  layout->addWidget(context_view);
+  context_view->show();
+  splitter_->addWidget(context_pane_);
+  splitter_->setStretchFactor(2, 0);
+
+  source_list_->SetExcludedViews(QStringList() << u"context"_s);
+
+}
+
+void ITunesTheme::RestoreSettings() {
+
+  Settings s;
+  s.beginGroup(kSettingsGroup);
+  const int sidebar_width = std::max(100, s.value(kSidebarWidth, kDefaultSidebarWidth).toInt());
+  const int context_width = std::max(150, s.value(kContextWidth, kDefaultContextWidth).toInt());
+  const bool context_visible = s.value(kContextVisible, false).toBool();
+  const bool artwork_visible = s.value(kArtworkVisible, true).toBool();
+  if (s.contains(kHiddenSources)) {
+    source_list_->SetHiddenViews(s.value(kHiddenSources).toStringList());
+  }
+  const QString source = s.value(kSource, u"collection"_s).toString();
+  s.endGroup();
+
+  // The stock layout's splitter state is kept for when the layout is switched back, so the widths are restored separately.
+  splitter_->setStretchFactor(0, 0);
+  splitter_->setStretchFactor(1, 1);
+  QList<int> sizes = QList<int>() << sidebar_width << std::max(400, mainwindow_->width() - sidebar_width - context_width);
+  if (context_pane_) sizes << context_width;
+  splitter_->setSizes(sizes);
+
+  SetContextVisible(context_visible);
+  SetArtworkVisible(artwork_visible);
+  source_list_->SetCurrentSource(source);
+
+}
+
+void ITunesTheme::SetContextVisible(const bool visible) {
+
+  if (!context_pane_) return;
+  context_pane_->setVisible(visible);
+  context_button_->setChecked(visible);
+
+}
+
+void ITunesTheme::SetArtworkVisible(const bool visible) {
+
+  artwork_visible_ = visible;
+  artwork_button_->setChecked(visible);
+  ui_->widget_playing->SetEnabled(visible);
+
+}
+
+void ITunesTheme::ShuffleClicked() {
+
+  PlaylistSequence *sequence = ui_->playlist_sequence;
+  sequence->SetShuffleMode(sequence->shuffle_mode() == PlaylistSequence::ShuffleMode::Off ? PlaylistSequence::ShuffleMode::All : PlaylistSequence::ShuffleMode::Off);
+
+}
+
+void ITunesTheme::RepeatClicked() {
+
+  // Off, the whole playlist, one song, like the jukebox this layout is modelled on.
+  // The other modes are in the menu on a right click.
+  PlaylistSequence *sequence = ui_->playlist_sequence;
+  switch (sequence->repeat_mode()) {
+    case PlaylistSequence::RepeatMode::Off:
+      sequence->SetRepeatMode(PlaylistSequence::RepeatMode::Playlist);
+      break;
+    case PlaylistSequence::RepeatMode::Playlist:
+      sequence->SetRepeatMode(PlaylistSequence::RepeatMode::Track);
+      break;
+    default:
+      sequence->SetRepeatMode(PlaylistSequence::RepeatMode::Off);
+      break;
+  }
+
+}
+
+void ITunesTheme::ShuffleModeChanged(const PlaylistSequence::ShuffleMode mode) {
+
+  QString text;
+  switch (mode) {
+    case PlaylistSequence::ShuffleMode::Off:         text = tr("Off"); break;
+    case PlaylistSequence::ShuffleMode::All:         text = tr("All songs"); break;
+    case PlaylistSequence::ShuffleMode::InsideAlbum: text = tr("Within an album"); break;
+    case PlaylistSequence::ShuffleMode::Albums:      text = tr("Albums"); break;
+    case PlaylistSequence::ShuffleMode::Grouping:    text = tr("Within a grouping"); break;
+  }
+  shuffle_button_->setChecked(mode != PlaylistSequence::ShuffleMode::Off);
+  shuffle_button_->setToolTip(tr("Shuffle: %1 (right click for more)").arg(text));
+
+}
+
+void ITunesTheme::RepeatModeChanged(const PlaylistSequence::RepeatMode mode) {
+
+  QString text;
+  switch (mode) {
+    case PlaylistSequence::RepeatMode::Off:      text = tr("Off"); break;
+    case PlaylistSequence::RepeatMode::Track:    text = tr("One song"); break;
+    case PlaylistSequence::RepeatMode::Album:    text = tr("Album"); break;
+    case PlaylistSequence::RepeatMode::Playlist: text = tr("Playlist"); break;
+    case PlaylistSequence::RepeatMode::OneByOne: text = tr("Stop after each song"); break;
+    case PlaylistSequence::RepeatMode::Scan:     text = tr("Intro scan"); break;
+  }
+  repeat_button_->setChecked(mode != PlaylistSequence::RepeatMode::Off);
+  repeat_button_->SetGlyph(mode == PlaylistSequence::RepeatMode::Track ? ITunesButton::Glyph::RepeatOne : ITunesButton::Glyph::Repeat);
+  repeat_button_->setToolTip(tr("Repeat: %1 (right click for more)").arg(text));
+
+}
+
+void ITunesTheme::SongChanged(const Song &song) {
+
+  // For the ones who care: the exact format of the song playing, e.g. "FLAC · 24-bit · 96 kHz · 2304 kbps".
+  QStringList parts;
+  if (song.is_valid()) {
+    if (song.filetype() != Song::FileType::Unknown) parts << song.TextForFiletype();
+    if (song.bitdepth() > 0) parts << tr("%1-bit").arg(song.bitdepth());
+    if (song.samplerate() > 0) parts << tr("%1 kHz").arg(QString::number(song.samplerate() / 1000.0, 'g', 4));
+    if (song.bitrate() > 0) parts << tr("%1 kbps").arg(song.bitrate());
+  }
+  format_label_->setText(parts.join(u" · "_s));
+  hires_label_->setVisible(song.is_valid() && song.IsFileLossless() && (song.bitdepth() > 16 || song.samplerate() > 48000));
 
 }
 
 void ITunesTheme::RearrangeSidebar() {
 
-  // Replace the tab bar with the source list, the tab widget is only used to switch between the views.
+  // The tab widget is only used to switch between the views, the source list replaces its tab bar.
   original_tab_mode_ = tabs_->mode();
   tabs_->SetMode(FancyTabWidget::Mode::Tabs);
   tabs_->tabBar()->hide();
@@ -274,73 +503,58 @@ void ITunesTheme::RearrangeSidebar() {
   // The now playing artwork lives at the bottom of the source list instead of moving between the views.
   tabs_->AddBottomWidget(nullptr);
 
-  source_splitter_ = new QSplitter(Qt::Horizontal, ui_->sidebar_layout);
-  source_splitter_->setObjectName(u"itunes_source_splitter"_s);
-  source_splitter_->setChildrenCollapsible(false);
+  // Playlists are picked and managed in the source list, so the playlist tabs and the toolbar buttons are not needed.
+  // The toolbar itself stays visible with no height, the song list is only filtered while it is visible.
+  if (QWidget *tab_bar = ui_->playlist->findChild<QWidget*>(u"tab_bar"_s)) {
+    tab_bar->hide();
+  }
+  if (QWidget *toolbar = ui_->playlist->findChild<QWidget*>(u"toolbar"_s)) {
+    const QList<QWidget*> toolbar_widgets = toolbar->findChildren<QWidget*>(Qt::FindDirectChildrenOnly);
+    for (QWidget *widget : toolbar_widgets) widget->hide();
+    toolbar->setFixedHeight(0);
+  }
 
-  QWidget *source_column = new QWidget(source_splitter_);
+  QWidget *source_column = new QWidget(ui_->sidebar_layout);
   source_column->setObjectName(u"itunes_source_column"_s);
   QVBoxLayout *source_layout = new QVBoxLayout(source_column);
   source_layout->setContentsMargins(0, 0, 0, 0);
   source_layout->setSpacing(0);
-  source_layout->addWidget(new ITunesSourceList(tabs_, source_column), 1);
+  source_list_ = new ITunesSourceList(tabs_, playlist_manager_, source_column);
+  source_layout->addWidget(source_list_, 1);
   MoveWidget(ui_->widget_playing, source_layout);
+  ui_->layout_left->insertWidget(0, source_column, 1);
 
-  source_splitter_->addWidget(source_column);
-  source_splitter_->addWidget(tabs_);
-  source_splitter_->setStretchFactor(0, 0);
-  source_splitter_->setStretchFactor(1, 1);
-  ui_->layout_left->insertWidget(0, source_splitter_, 1);
+  // The views are shown in place of the song list.
+  ui_->layout_right->insertWidget(0, tabs_, 1);
+  ui_->layout_right->setStretchFactor(ui_->playlist, 1);
+  QObject::connect(source_list_, &ITunesSourceList::SourceChanged, this, &ITunesTheme::ShowSource);
 
-  Settings s;
-  s.beginGroup(kSettingsGroup);
-  const QByteArray source_splitter_state = s.value(kSourceSplitterState).toByteArray();
-  const bool browse = s.value(kBrowse, true).toBool();
-  browse_width_ = s.value(kBrowseWidth, kDefaultBrowseWidth).toInt();
-  s.endGroup();
-
-  if (source_splitter_state.isEmpty() || !source_splitter_->restoreState(source_splitter_state)) {
-    source_splitter_->setSizes(QList<int>() << kDefaultSourceListWidth << kDefaultBrowseWidth);
-    // First time in this layout, make room for both the source list and the browser.
-    QList<int> sizes = splitter_->sizes();
-    const int sidebar_width = kDefaultSourceListWidth + (browse ? kDefaultBrowseWidth : 0);
-    if (sizes.count() == 2 && sizes[0] < sidebar_width) {
-      sizes[1] = std::max(0, sizes[1] - (sidebar_width - sizes[0]));
-      sizes[0] = sidebar_width;
-      splitter_->setSizes(sizes);
-    }
-  }
-
-  // The main splitter was saved with the browser in this state already, so don't resize it.
-  tabs_->setVisible(browse);
-  browse_button_->setChecked(browse);
+  // New playlists are named in the source list, also when created from the menu.
+  QObject::disconnect(ui_->action_new_playlist, &QAction::triggered, ui_->playlist, nullptr);
+  QObject::connect(ui_->action_new_playlist, &QAction::triggered, source_list_, &ITunesSourceList::NewPlaylist);
 
 }
 
-void ITunesTheme::SetBrowseVisible(const bool visible) {
+void ITunesTheme::ShowSource(const bool playlist) {
 
-  browse_button_->setChecked(visible);
-  if (visible == !tabs_->isHidden()) return;
+  tabs_->setVisible(!playlist);
+  ui_->playlist->setVisible(playlist);
+  // Search and the summary are about the song list, the views have their own search.
+  if (search_column_) search_column_->setVisible(playlist);
+  ui_->playlist_summary->setVisible(playlist);
+  if (browse_button_) browse_button_->setChecked(source_list_->CurrentSource() == "collection"_L1);
 
-  // Grow or shrink the sidebar by the width of the browser, so the source list keeps its size.
-  QList<int> sizes = splitter_->sizes();
-  if (visible) {
-    tabs_->show();
-    if (sizes.count() == 2) {
-      const int width = std::min(browse_width_, sizes[1] - 100);
-      sizes[0] += width;
-      sizes[1] -= width;
-    }
+}
+
+void ITunesTheme::BrowseClicked(const bool checked) {
+
+  // Browse switches between the library and the playlist last shown.
+  if (checked) {
+    source_list_->SelectLibrary();
   }
   else {
-    browse_width_ = tabs_->width() + source_splitter_->handleWidth();
-    tabs_->hide();
-    if (sizes.count() == 2) {
-      sizes[0] -= browse_width_;
-      sizes[1] += browse_width_;
-    }
+    source_list_->SelectCurrentPlaylist();
   }
-  splitter_->setSizes(sizes);
 
 }
 
@@ -356,7 +570,7 @@ void ITunesTheme::TabModeChanged(const FancyTabWidget::Mode mode) {
 
 void ITunesTheme::SaveSettings() {
 
-  if (!source_splitter_) return;
+  if (!source_list_) return;
 
   Settings s;
 
@@ -366,9 +580,22 @@ void ITunesTheme::SaveSettings() {
   s.endGroup();
 
   s.beginGroup(kSettingsGroup);
-  s.setValue(kSourceSplitterState, source_splitter_->saveState());
-  s.setValue(kBrowse, !tabs_->isHidden());
-  s.setValue(kBrowseWidth, browse_width_);
+  const QList<int> sizes = splitter_->sizes();
+  if (!sizes.isEmpty() && sizes[0] > 0) {
+    s.setValue(kSidebarWidth, sizes[0]);
+  }
+  if (context_pane_ && sizes.count() > 2 && sizes[2] > 0) {
+    s.setValue(kContextWidth, sizes[2]);
+  }
+  s.setValue(kContextVisible, context_pane_ && !context_pane_->isHidden());
+  s.setValue(kArtworkVisible, artwork_visible_);
+  s.setValue(kSource, source_list_->CurrentSource());
+  s.setValue(kHiddenSources, source_list_->hidden_views());
+  // Settings of the earlier versions of this layout.
+  s.remove(u"source_splitter_state"_s);
+  s.remove(u"browse"_s);
+  s.remove(u"browse_width"_s);
+  s.remove(u"hidden_views"_s);
   s.endGroup();
 
 }
